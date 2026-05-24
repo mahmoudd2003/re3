@@ -1,0 +1,75 @@
+name: Daily WordPress Article Update
+
+on:
+  schedule:
+    # UTC Time
+    # Jordan approximately:
+    # 08:13 AM
+    # 12:41 PM
+    # 04:27 PM
+    # 09:52 PM
+    - cron: "13 5 * * *"
+    - cron: "41 9 * * *"
+    - cron: "27 13 * * *"
+    - cron: "52 18 * * *"
+
+  workflow_dispatch:
+    inputs:
+      run_index:
+        description: "Run index from 1 to 4"
+        required: true
+        default: "1"
+
+jobs:
+  update-posts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Determine run index
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "RUN_INDEX=${{ github.event.inputs.run_index }}" >> $GITHUB_ENV
+          else
+            HOUR=$(date -u +'%H')
+            MINUTE=$(date -u +'%M')
+            TIME="${HOUR}:${MINUTE}"
+
+            if [ "$TIME" = "05:13" ]; then
+              echo "RUN_INDEX=1" >> $GITHUB_ENV
+            elif [ "$TIME" = "09:41" ]; then
+              echo "RUN_INDEX=2" >> $GITHUB_ENV
+            elif [ "$TIME" = "13:27" ]; then
+              echo "RUN_INDEX=3" >> $GITHUB_ENV
+            elif [ "$TIME" = "18:52" ]; then
+              echo "RUN_INDEX=4" >> $GITHUB_ENV
+            else
+              echo "RUN_INDEX=1" >> $GITHUB_ENV
+            fi
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run auto updater
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          RUN_INDEX: ${{ env.RUN_INDEX }}
+        run: python auto_update.py
+
+      - name: Upload run report
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-report-run-${{ env.RUN_INDEX }}
+          path: daily_report_run_${{ env.RUN_INDEX }}.csv
