@@ -131,7 +131,7 @@ def similarity_guard(old_text, new_text):
 
     overlap = len(old_set.intersection(new_set)) / max(1, len(old_set))
 
-    if overlap < 0.85:
+    if overlap < 0.75:
         return False, "Change too large"
 
     if old_text.strip() == new_text.strip():
