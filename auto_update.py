@@ -25,10 +25,6 @@ if RUN_INDEX < 1 or RUN_INDEX > RUNS_PER_DAY:
 REPORT_FILE = f"daily_report_run_{RUN_INDEX}.csv"
 
 
-# =========================
-# DAILY TARGET
-# =========================
-
 def get_daily_target_count():
     day_of_year = datetime.now(timezone.utc).timetuple().tm_yday
     index = (day_of_year - 1) % len(DAILY_SEQUENCE)
@@ -38,7 +34,6 @@ def get_daily_target_count():
 def split_daily_count(total, runs=4):
     base = total // runs
     remainder = total % runs
-
     parts = [base] * runs
 
     for i in range(remainder):
@@ -51,16 +46,10 @@ def get_current_run_target():
     daily_target = get_daily_target_count()
     distribution = split_daily_count(daily_target, RUNS_PER_DAY)
     run_target = distribution[RUN_INDEX - 1]
-
     return daily_target, run_target, distribution
 
 
-# =========================
-# WORDPRESS
-# =========================
-
 def get_posts(per_page=50):
-
     url = f"{SITE_URL}/wp-json/wp/v2/posts"
 
     params = {
@@ -78,12 +67,10 @@ def get_posts(per_page=50):
     )
 
     response.raise_for_status()
-
     return response.json()
 
 
 def update_post(post_id, new_html):
-
     url = f"{SITE_URL}/wp-json/wp/v2/posts/{post_id}"
 
     response = requests.post(
@@ -96,18 +83,11 @@ def update_post(post_id, new_html):
     return response
 
 
-# =========================
-# PARAGRAPHS
-# =========================
-
 def extract_valid_paragraphs(html):
-
     soup = BeautifulSoup(html, "lxml")
-
     valid = []
 
     for p in soup.find_all("p"):
-
         text = p.get_text(" ", strip=True)
 
         if len(text) < 80:
@@ -130,22 +110,17 @@ def extract_valid_paragraphs(html):
     return soup, valid
 
 
-# =========================
-# SIMILARITY GUARD
-# =========================
-
 def similarity_guard(old_text, new_text):
-
     old_words = old_text.split()
     new_words = new_text.split()
 
     if len(new_text.strip()) < 50:
         return False, "New text too short"
 
-    if len(new_words) < max(5, int(len(old_words) * 0.90)):
+    if len(new_words) < max(5, int(len(old_words) * 0.85)):
         return False, "Removed too much content"
 
-    if len(new_words) > int(len(old_words) * 1.10):
+    if len(new_words) > int(len(old_words) * 1.20):
         return False, "Added too much content"
 
     old_set = set(old_words)
@@ -156,8 +131,7 @@ def similarity_guard(old_text, new_text):
 
     overlap = len(old_set.intersection(new_set)) / max(1, len(old_set))
 
-    # 90% similarity required
-    if overlap < 0.90:
+    if overlap < 0.85:
         return False, "Change too large"
 
     if old_text.strip() == new_text.strip():
@@ -166,12 +140,7 @@ def similarity_guard(old_text, new_text):
     return True, "Accepted"
 
 
-# =========================
-# OPENAI MICRO EDIT
-# =========================
-
 def micro_rewrite_paragraph(text):
-
     prompt = f"""
 قم بتعديل خفيف وطبيعي جدًا على الفقرة التالية.
 
@@ -183,7 +152,7 @@ def micro_rewrite_paragraph(text):
 - لا تغيّر أسماء الأماكن أو الأشخاص أو المطاعم.
 - لا تغيّر الأرقام أو الأسعار أو أوقات العمل.
 - لا تغيّر الكلمات المفتاحية المهمة.
-- التعديل يجب أن يكون خفيفًا جدًا وطبيعيًا.
+- التعديل يجب أن يكون خفيفًا وطبيعيًا.
 - نسبة التعديل يجب أن تكون تقريبًا 5% إلى 7% فقط.
 - يمكن تحسين جملة قصيرة أو استبدال بعض الكلمات البسيطة.
 - لا تستخدم أسلوبًا تسويقيًا.
@@ -202,7 +171,6 @@ def micro_rewrite_paragraph(text):
     )
 
     new_text = response.output_text.strip()
-
     new_text = new_text.strip('"').strip("'").strip()
 
     ok, reason = similarity_guard(text, new_text)
@@ -213,12 +181,7 @@ def micro_rewrite_paragraph(text):
     return new_text, "AI micro edit accepted"
 
 
-# =========================
-# SITEMAP REFRESH
-# =========================
-
 def refresh_sitemap(post_url):
-
     urls = [
         post_url,
         f"{SITE_URL}/sitemap_index.xml",
@@ -226,19 +189,13 @@ def refresh_sitemap(post_url):
     ]
 
     for url in urls:
-
         try:
             requests.get(url, timeout=15)
-        except:
+        except Exception:
             pass
 
 
-# =========================
-# REPORT
-# =========================
-
 def write_report(rows):
-
     fieldnames = [
         "run_time_utc",
         "run_index",
@@ -260,12 +217,7 @@ def write_report(rows):
         newline="",
         encoding="utf-8-sig"
     ) as f:
-
-        writer = csv.DictWriter(
-            f,
-            fieldnames=fieldnames
-        )
-
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
 
@@ -282,7 +234,6 @@ def add_row(
     new_paragraph="",
     message=""
 ):
-
     rows.append({
         "run_time_utc": now,
         "run_index": RUN_INDEX,
@@ -299,37 +250,26 @@ def add_row(
     })
 
 
-# =========================
-# MAIN
-# =========================
-
 def main():
-
     now = datetime.now(timezone.utc).isoformat()
-
     daily_target, run_target, distribution = get_current_run_target()
 
     posts = get_posts(per_page=50)
-
     random.shuffle(posts)
 
     rows = []
-
     updated_count = 0
 
     for post in posts:
-
         if updated_count >= run_target:
             break
 
         try:
-
             soup, valid_paragraphs = extract_valid_paragraphs(
                 post["content"]["rendered"]
             )
 
             if not valid_paragraphs:
-
                 add_row(
                     rows,
                     now,
@@ -340,22 +280,14 @@ def main():
                     "skipped",
                     message="No valid paragraph found"
                 )
-
                 continue
 
             chosen_p = random.choice(valid_paragraphs)
+            old_text = chosen_p.get_text(" ", strip=True)
 
-            old_text = chosen_p.get_text(
-                " ",
-                strip=True
-            )
-
-            new_text, rewrite_message = micro_rewrite_paragraph(
-                old_text
-            )
+            new_text, rewrite_message = micro_rewrite_paragraph(old_text)
 
             if old_text == new_text:
-
                 add_row(
                     rows,
                     now,
@@ -368,7 +300,6 @@ def main():
                     new_text,
                     rewrite_message
                 )
-
                 continue
 
             chosen_p.string = new_text
@@ -379,9 +310,7 @@ def main():
             )
 
             if response.status_code in [200, 201]:
-
                 refresh_sitemap(post["link"])
-
                 updated_count += 1
 
                 add_row(
@@ -398,7 +327,6 @@ def main():
                 )
 
             else:
-
                 add_row(
                     rows,
                     now,
@@ -413,7 +341,6 @@ def main():
                 )
 
         except Exception as e:
-
             add_row(
                 rows,
                 now,
