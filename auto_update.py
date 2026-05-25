@@ -18,7 +18,6 @@ DAILY_SEQUENCE = [3, 5, 7, 9, 12, 15, 18]
 RUNS_PER_DAY = 4
 
 RUN_INDEX = int(os.environ.get("RUN_INDEX", "1"))
-
 if RUN_INDEX < 1 or RUN_INDEX > RUNS_PER_DAY:
     RUN_INDEX = 1
 
@@ -51,7 +50,6 @@ def get_current_run_target():
 
 def get_posts(per_page=50):
     url = f"{SITE_URL}/wp-json/wp/v2/posts"
-
     params = {
         "per_page": per_page,
         "status": "publish",
@@ -59,28 +57,14 @@ def get_posts(per_page=50):
         "order": "asc"
     }
 
-    response = requests.get(
-        url,
-        params=params,
-        auth=AUTH,
-        timeout=30
-    )
-
+    response = requests.get(url, params=params, auth=AUTH, timeout=30)
     response.raise_for_status()
     return response.json()
 
 
 def update_post(post_id, new_html):
     url = f"{SITE_URL}/wp-json/wp/v2/posts/{post_id}"
-
-    response = requests.post(
-        url,
-        json={"content": new_html},
-        auth=AUTH,
-        timeout=30
-    )
-
-    return response
+    return requests.post(url, json={"content": new_html}, auth=AUTH, timeout=30)
 
 
 def extract_valid_paragraphs(html):
@@ -92,16 +76,12 @@ def extract_valid_paragraphs(html):
 
         if len(text) < 80:
             continue
-
         if len(text) > 700:
             continue
-
         if p.find("a"):
             continue
-
         if "الأسئلة الشائعة" in text:
             continue
-
         if "FAQ" in text:
             continue
 
@@ -117,10 +97,10 @@ def similarity_guard(old_text, new_text):
     if len(new_text.strip()) < 50:
         return False, "New text too short"
 
-    if len(new_words) < max(5, int(len(old_words) * 0.85)):
+    if len(new_words) < max(5, int(len(old_words) * 0.75)):
         return False, "Removed too much content"
 
-    if len(new_words) > int(len(old_words) * 1.20):
+    if len(new_words) > int(len(old_words) * 1.35):
         return False, "Added too much content"
 
     old_set = set(old_words)
@@ -145,7 +125,6 @@ def micro_rewrite_paragraph(text):
 قم بتعديل خفيف وطبيعي جدًا على الفقرة التالية.
 
 الشروط الصارمة:
-
 - لا تغيّر المعنى إطلاقًا.
 - لا تضف أي معلومة جديدة.
 - لا تحذف أي معلومة مهمة.
@@ -211,12 +190,7 @@ def write_report(rows):
         "message"
     ]
 
-    with open(
-        REPORT_FILE,
-        "w",
-        newline="",
-        encoding="utf-8-sig"
-    ) as f:
+    with open(REPORT_FILE, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
@@ -304,10 +278,7 @@ def main():
 
             chosen_p.string = new_text
 
-            response = update_post(
-                post["id"],
-                str(soup)
-            )
+            response = update_post(post["id"], str(soup))
 
             if response.status_code in [200, 201]:
                 refresh_sitemap(post["link"])
